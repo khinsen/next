@@ -1,21 +1,14 @@
 ;;; utility.lisp --- utility classes and functions
+;; TODO: Split this file into files with more relevant names (e.g. fuzzy, file-size, etc.).
 
 (in-package :next)
+(annot:enable-annot-syntax)
 
-
+@export
 (defmethod object-string ((object t))
   (princ-to-string object))
 
-;; data node used to represent tree history
-(defclass node ()
-    ((parent :accessor node-parent :initarg :parent :initform nil)
-     (children :accessor node-children :initform nil)
-     (data :accessor node-data :initarg :data :initform nil)))
-
-(defmethod object-string ((node node))
-  (node-data node))
-
-(define-command start-swank (root-mode &optional (swank-port *swank-port*))
+(define-command start-swank (&optional (swank-port *swank-port*))
   "Start a Swank server that can be connected to, for instance, in Emacs via
 SLIME."
   (swank:create-server :port swank-port :dont-close t))
@@ -29,14 +22,14 @@ If the input is actually a file path, open it.
 Suppose the user omitted the scheme: if the input prefixed by 'https://' gives a valid uri, go to it.
 Otherwise, build a search query with the default search engine."
   (let* ((window (rpc-window-active *interface*))
-         (engine (assoc (first (cl-strings:split input-url))
+         (engine (assoc (first (str:split " " input-url))
                         (search-engines window) :test #'string=))
          (default (assoc "default"
                          (search-engines window) :test #'string=)))
     (if engine
         (generate-search-query
          (subseq input-url
-                 (length (first (cl-strings:split input-url))))
+                 (length (first (str:split " " input-url))))
          (rest engine))
         (let ((recognized-scheme (ignore-errors (quri:uri-scheme (quri:uri input-url)))))
           (cond
@@ -65,7 +58,7 @@ Otherwise, build a search query with the default search engine."
 
 (defun generate-search-query (search-string search-url)
   (let* ((encoded-search-string
-           (cl-string-match:replace-re "  *" "+" search-string :all t))
+           (cl-ppcre:regex-replace-all " +" search-string "+"))
          (url (format nil search-url encoded-search-string)))
     url))
 
@@ -146,6 +139,7 @@ more details."
                                      (< (mk-string-metrics:levenshtein input (first x))
                                         (mk-string-metrics:levenshtein input (first y))))))
 
+@export
 (defun fuzzy-match (input candidates)
   "From the user input and a list of candidates, return a filtered list of
 candidates that have all the input words in them, and sort this list to have the
@@ -165,6 +159,7 @@ The match is case-sensitive if INPUT contains at least one uppercase character."
         (mapcar #'second pairs))
       candidates))
 
+@export
 (defun xdg-data-home (&optional (file-name ""))
   "Return XDG_DATA_HOME as per XDG directory specification.
 FILE-NAME is appended to the result."
@@ -174,6 +169,7 @@ FILE-NAME is appended to the result."
     (make-pathname :directory '(:relative "next"))
     (uiop:xdg-data-home))))
 
+@export
 (defun xdg-config-home (&optional (file-name ""))
   "Return XDG_CONFIG_HOME as per XDG directory specification.
 FILE-NAME is appended to the result."
@@ -206,6 +202,7 @@ When non-nil, INIT-FUNCTION is used to create the file, else the file will be em
                  slot-name))
            (closer-mop:class-slots class)))
 
+@export
 (defun get-default (class-name slot-name)
   "Get default value of slot SLOT-NAME from class CLASS-NAME.
 The second value is the initfunction."
@@ -227,6 +224,7 @@ The second value is the initfunction."
         (eval value)
         value)))
 
+@export
 (defun (setf get-default) (value class-name slot-name)
   "Set default value of SLOT-NAME from CLASS-NAME.
 Return VALUE."
@@ -246,12 +244,14 @@ If VALUE is already present, move it to the head of the list."
                                  (get-default class-name slot-name))
                            :from-end t)))
 
+@export
 (defun member-string (string list)
   "Return the tail of LIST beginning whose first element is STRING."
   (check-type string string)
   (member string list :test #'string=))
 
 ;; This is mostly inspired by Emacs 26.2.
+@export
 (defun file-size-human-readable (file-size &optional flavor)
   "Produce a string showing FILE-SIZE in human-readable form.
 
@@ -287,3 +287,40 @@ Optional second argument FLAVOR controls the units and the display format:
                "B")
               ((eq flavor 'iec) "iB")
               (t "")))))
+
+(declaim (ftype (function (fixnum &optional fixnum)) kill-program))
+(defun kill-program (pid &optional (signal 15))
+  (handler-case (uiop:run-program
+                 (list "kill" (format nil "-~a" signal)
+                       (write-to-string pid)))
+    (error ()
+      (log:error "Process with PID ~a is not running" pid))))
+
+(declaim (ftype (function (string &rest string)) run-program-to-string))
+(defun run-program-to-string (program &rest args)
+  "Run PROGRAM over ARGS and return the its standard output."
+  (handler-case
+      (multiple-value-bind (output error code)
+          (uiop:run-program (cons program args)
+                            :output '(:string :stripped t)
+                            :error-output '(:string :stripped t)
+                            :ignore-error-status t)
+        (if (not (= 0 code))
+            (progn
+              (log:error "~a error: ~a" program error)
+              (uiop:quit))
+            output))
+    (error ()
+      (log:error "~s not found." program)
+      (uiop:quit))))
+
+;; TODO: Backport upstream?  See https://github.com/scymtym/architecture.hooks/issues/2.
+;; TODO: For now the user has no way to choose between `hooks:run-hook' and
+;; `next:run-composed-hook'.
+(defun run-composed-hook (hook &rest args)
+  "Compose all handlers in HOOK and call the resulting function over ARGS."
+  (if hook
+      (apply (apply #'alexandria:compose hook) args)
+      ;; We return values so that this is equivalent to #'identity when there is
+      ;; no hook.
+      (apply #'values args)))

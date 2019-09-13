@@ -76,8 +76,9 @@ returns
   "Add search boxes for a given search string."
   (initialize-search-buffer)
   (with-result (input (read-from-minibuffer
-                       (minibuffer *interface*)
-                       :input-prompt "Search for:"))
+                       (make-instance 'minibuffer
+                                      :input-prompt "Search for:"
+                                      :history (minibuffer-search-history *interface*))))
     (%remove-search-hints)
     (%add-search-hints
      :search-string input
@@ -88,7 +89,7 @@ returns
 
 (define-deprecated-command add-search-hints ()
   "Deprecated by `search-buffer'."
-  (search-buffer (make-instance 'root-mode)))
+  (search-buffer))
 
 (define-parenscript %remove-search-hints ()
   (defun qsa (context selector)

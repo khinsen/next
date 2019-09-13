@@ -1,10 +1,12 @@
 ;;; keymap.lisp --- lisp subroutines for key binding detection
 
 (in-package :next)
+(annot:enable-annot-syntax)
 
 (defclass keymap ()
   ((table :initarg :table :accessor table)))
 
+@export
 (defun make-keymap ()
   "Return an empty keymap."
   (make-instance 'keymap :table (make-hash-table :test 'equal)))
@@ -73,35 +75,24 @@ This is effectively the inverse of `serialize-key-chord-stack'."
                   (reverse serialized-key-stack))))
 
 (defun current-keymaps (window)
-  "Return the list of (keymap . mode) for the current buffer, ordered by priority."
+  "Return the list of `keymap' for the current buffer, ordered by priority."
   (let ((buffer (active-buffer window)))
     (when buffer
-      (cons (cons (override-map buffer)
-                  (first (modes buffer)))
-            (delete-if #'null (mapcar (lambda (mode) (when (keymap mode)
-                                                       (cons (keymap mode) mode)))
-                                      (modes (if (minibuffer-active window)
-                                                 (minibuffer *interface*)
-                                                 (active-buffer window)))))))))
+      (cons (override-map buffer)
+            (delete-if #'null (mapcar #'keymap (modes (if (active-minibuffers window)
+                                                          (minibuffer *interface*)
+                                                          (active-buffer window)))))))))
 
 (defun look-up-key-chord-stack (window key-chord-stack)
-  "Return the function bound to key-chord-stack for current window.
-The resulting function wraps around the method and its associated mode so that
-it can be called without argument."
+  "Return the function bound to KEY-CHORD-STACK for WINDOW."
   (let* ((key-sequence (serialize-key-chord-stack key-chord-stack))
-         (key-sequence-normal (serialize-key-chord-stack key-chord-stack :normalize t))
-         (fun+mode (loop for (keymap . mode) in (current-keymaps window)
-                         for fun = (get-key keymap key-sequence)
-                         unless fun
-                           do (setf fun (get-key keymap key-sequence-normal))
-                         when fun
-                           return (cons fun mode))))
-    (when fun+mode
-      (if (eq (first fun+mode) #'prefix)
-          (first fun+mode)
-          (lambda ()
-            (log:debug "Calling method ~a from mode ~a." (first fun+mode) (rest fun+mode))
-            (funcall (first fun+mode) (rest fun+mode)))))))
+         (key-sequence-normal (serialize-key-chord-stack key-chord-stack :normalize t)))
+    (loop for keymap in (current-keymaps window)
+          for fun = (get-key keymap key-sequence)
+          unless fun
+            do (setf fun (get-key keymap key-sequence-normal))
+          when fun
+            return fun)))
 
 (defun pointer-event-p (key-chord)
   "Return non-nil if key-chord is a pointer event, e.g. a mouton button click."
@@ -151,7 +142,7 @@ it can be called without argument."
            (funcall bound-function)
            (setf (key-chord-stack *interface*) nil))
           ;; minibuffer is active
-          ((minibuffer-active active-window)
+          ((active-minibuffers active-window)
            (if (member-string "R" (key-chord-modifiers (first (key-chord-stack *interface*))))
                (progn
                  ;; (log:debug "Key released") ; TODO: This makes the debug trace too verbose.  Middle ground?
@@ -173,6 +164,7 @@ it can be called without argument."
            (setf (key-chord-stack *interface*) nil))
           (t (setf (key-chord-stack *interface*) nil)))))))
 
+@export
 (defun define-key (&rest key-command-pairs
                    &key mode (scheme :emacs) keymap
                    &allow-other-keys)
@@ -237,8 +229,8 @@ This can serve as the key in the keymap."
   (serialize-key-chord-stack
    (nreverse
     ;; Iterate through all key chords (space delimited)
-    (loop for key-chord-string in (cl-strings:split key-sequence-string " ")
-          for keys = (cl-strings:split key-chord-string "-")
+    (loop for key-chord-string in (str:split " " key-sequence-string)
+          for keys = (str:split "-" key-chord-string)
           collect (make-key-chord
                    :key-code nil
                    :key-string (first (last keys))

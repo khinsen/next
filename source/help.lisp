@@ -2,6 +2,7 @@
 
 (in-package :next)
 
+;; TODO: Move to a separate package like other modes?
 (define-mode help-mode ()
     "Mode for displaying documentation."
     ((keymap-schemes
@@ -9,11 +10,11 @@
       (let ((emacs-map (make-keymap))
             (vi-map (make-keymap)))
         (define-key :keymap emacs-map
-          "C-p" 'scroll-up
-          "C-n" 'scroll-down)
+          "C-p" #'scroll-up
+          "C-n" #'scroll-down)
         (define-key :keymap vi-map
-          "k" 'scroll-up
-          "j" 'scroll-down)
+          "k" #'scroll-up
+          "j" #'scroll-down)
         (list :emacs emacs-map
               :vi-normal vi-map)))))
 
@@ -24,7 +25,7 @@
 (defun variable-complete (input)
   (fuzzy-match input (package-variables)))
 
-(defun function-complete (input)
+(defun function-complete (input)        ; TODO: Rename to `command-complete-fn' and show packages.
   (fuzzy-match input (mapcar #'sym (list-commands))))
 
 ;; TODO: This is barely useful as is since we don't have many globals.  We need to
@@ -32,9 +33,9 @@
 (define-command variable-inspect ()
   "Inspect a variable and show it in a help buffer."
   (with-result (input (read-from-minibuffer
-                       (minibuffer *interface*)
-                       :completion-function 'variable-complete
-                       :input-prompt "Inspect variable:"))
+                       (make-instance 'minibuffer
+                                      :completion-function 'variable-complete
+                                      :input-prompt "Inspect variable:")))
     (let* ((help-buffer (make-buffer
                          :name (concatenate 'string "HELP-" (symbol-name input))
                          :default-modes (cons 'help-mode
@@ -53,9 +54,9 @@
 (define-command command-inspect ()
   "Inspect a function and show it in a help buffer."
   (with-result (input (read-from-minibuffer
-                       (minibuffer *interface*)
-                       :input-prompt "Inspect command:"
-                       :completion-function 'function-complete))
+                       (make-instance 'minibuffer
+                                      :input-prompt "Inspect command:"
+                                      :completion-function 'function-complete)))
     (let* ((help-buffer (make-buffer
                          :name (str:concat "*Help-" (symbol-name input) "*")
                          :default-modes (cons 'help-mode
@@ -85,8 +86,8 @@ This does not use an implicit PROGN to allow evaluating top-level expressions."
 (define-command command-evaluate ()
   "Evaluate a form."
   (with-result (input (read-from-minibuffer
-                       (minibuffer *interface*)
-                       :input-prompt "Evaluate Lisp:"))
+                       (make-instance 'minibuffer
+                                      :input-prompt "Evaluate Lisp:")))
     (let* ((result-buffer (make-buffer
                            :name (concatenate 'string "EVALUATION RESULT-" input)
                            :default-modes (cons 'help-mode
@@ -132,7 +133,16 @@ This does not use an implicit PROGN to allow evaluating top-level expressions."
                  (:li "Spread the word on social media and "
                       (:a :href "https://github.com/atlas-engineer/next"
                           "star the project on GitHub")
-                      ".")))
+                      "."))
+
+                (:div
+                      (:a :href "https://www.indiegogo.com/projects/next-browser-v1-4-0/x/13474269#/"
+                       (:img :title "Help make our campaign a success"
+                             :src "https://raw.githubusercontent.com/atlas-engineer/next/master/assets/indiegogo-logo-small.png"))
+                      (:a :href "https://www.patreon.com/next_browser"
+                       (:img :title "Support us on Patreon"
+                             :src "https://raw.githubusercontent.com/atlas-engineer/next/master/assets/patreon-25x.png"))))
+
             (:h2 "Quickstart keys")
             (:ul
              (:li (:code "C-l") ": Load URL in tab")

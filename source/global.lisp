@@ -1,12 +1,15 @@
 ;;; global.lisp --- global variable and parameter declarations
+;; Packagers are welcome to customize the `defparameter's to suit the host system.
 
 (in-package :next)
+(annot:enable-annot-syntax)
 
 (defvar *options* ()
   "The list of command line options.")
 (defvar *free-args* ()
   "The list of positional command line arguments.")
 
+@export
 (defvar *interface* nil
   "The entry-point object to a complete instance of Next.
 It can be initialized with
@@ -28,6 +31,11 @@ is 4005, default set to 4006 in Next to avoid collisions).")
 (defparameter +core-object-path+ "/engineer/atlas/next/core")
 (defparameter +core-interface+ +core-name+)
 
+(defparameter +dbus-launch-command+ '("dbus-launch")
+  "The command to start dbus, if necessary.
+The first string is the command, the other strings are the arguments.")
+
+@export
 (defparameter +version+
   (let ((version (asdf/component:component-version (asdf:find-system :next)))
         (directory (asdf:system-source-directory :next)))

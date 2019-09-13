@@ -1,7 +1,7 @@
 ;;; Commentary:
 ;;
-;; GNU Guix development package.  To build and install, clone this
-;; repository, cd into it and run:
+;; GNU Guix development package.  To build and install, clone this repository,
+;; switch directory to it and run:
 ;;
 ;;   guix package -f guix.scm
 ;;
@@ -31,9 +31,7 @@
              (gnu packages gtk)
              (gnu packages pkg-config)
              (gnu packages gcc)
-             (gnu packages webkit)
-             ;; TODO: Get rid of the non-free dependencies.
-             (next packages lisp))
+             (gnu packages webkit))
 
 (define %source-dir (dirname (dirname (current-filename))))
 
@@ -97,7 +95,7 @@ features for productive professionals.")
     (arguments
      `(#:tests? #f                      ; Need online access.
        #:asd-file "next.asd"
-       #:asd-system-name "download-manager"))
+       #:asd-system-name "next/download-manager"))
     (inputs
      `(;; ASD libraries:
        ("trivial-features" ,sbcl-trivial-features)
@@ -185,8 +183,6 @@ features for productive professionals.")
          ("cl-markup" ,sbcl-cl-markup)
          ("cl-ppcre" ,sbcl-cl-ppcre)
          ("cl-ppcre-unicode" ,sbcl-cl-ppcre-unicode)
-         ("cl-string-match" ,sbcl-cl-string-match)
-         ("cl-strings" ,sbcl-cl-strings)
          ("closer-mop" ,sbcl-closer-mop)
          ("dbus" ,cl-dbus)
          ("dexador" ,sbcl-dexador)

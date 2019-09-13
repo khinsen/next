@@ -16,6 +16,7 @@ end-user allowing for infinite customization.
   - [[#history][History]]
   - [[#bookmarks][Bookmarks]]
   - [[#download-manager][Download manager]]
+  - [[#opening-files][Opening files]]
   - [[#clearing-the-echo-area][Clearing the Echo Area]]
   - [[#exiting][Exiting]]
   - [[#proxy-and-tor-support][Proxy and Tor support]]
@@ -32,6 +33,7 @@ end-user allowing for infinite customization.
   - [[#network-resource-dispatch-including-ad-blocking][Network resource dispatch (including ad-blocking)]]
   - [[#styles][Styles]]
   - [[#proxy][Proxy]]
+  - [[#hooks][Hooks]]
 
 * Basics
 ** Navigation
@@ -184,12 +186,18 @@ Each buffer has its own list of modes.  The first mode in the list has highest
 priority: this is important, for instance, to determine which key binding takes
 precedence in case of conflict.  See [[Keybinding]] for more details.
 
+Modes are CLOS objects that are instantiated per-buffer.  No buffer shares the
+same instance of a mode (by default at least).
+
+Modes are typically defined in their separate Common Lisp package.  This allows
+for defining mode-specific functions and variables in a separate namespace.
+
 *** Windows vs. buffers
 
 When opening a link from an external program, or when clicking on a link while
 =C= is pressed, Next can load the URL either
 
-- in a new window if =(open-external-link-in-new-window-p *interface)= is
+- in a new window if =(open-external-link-in-new-window-p *interface*)= is
   non-nil;
 - in a new buffer otherwise.
 
@@ -265,6 +273,19 @@ as usual, and also with =M-x download-list=.
 
 To open  a file, use  =M-x download-open-file=. See  the customization
 section to control how files are open.
+
+** Opening files
+
+With =M-x open-file= (bound to =C-x  C-f=), you are prompted a list of
+files, and you can select one with the usual fuzzy completion. You can
+go one directory  up with =M-Left= or =C-l=, and  enter the directory
+at point with =M-Right= or =C-j=.
+
+Next  will open  the  file  with the  system's  default program  using
+=xdg-open=.  See  the  command  help  for  further  details,  and  the
+customization section to override the default behavior.
+
+__Note__: this feature is alpha and is meant to grow in Next 1.4 and onwards.
 
 ** Clearing the Echo Area
 In the area at the bottom of the screen where the minibuffer resides,
@@ -457,22 +478,26 @@ The default keybindings for ~vi-normal-mode~ are:
 
 ** Decide how to open files
 
-The command =M-x download-open-file=, which is  used to open a file we
-downloaded  in  the  current  session,  calls  in  turn  the  function
-=open-file <filename>=. Its default behaviour is to open the file with
-the  system's  default,  using   =xdg-open=.  You  can  override  this
-behaviour by re-defining this function.
+The commands  =open-file= and  =download-open-file= call  the function
+=open-file-function <filename>=. Its  default behaviour is to  open the file
+with the  system's default, using  =xdg-open=.  You can  override this
+behaviour   by    binding   another    function   to    the   variable
+=next:*open-file-function*=.
 
 For example:
 
 #+begin_src lisp
-(defun open-file (filename)
-  "Open PDFs with Emacs."
+(defun my-open-videos (filename)
+  "Open videos with mpv."
   (handler-case (let ((extension (pathname-type filename)))
-                  (str:string-case extension
-                                   ("pdf" (uiop:run-program (list "emacs" filename)))
-                                   (otherwise (next::open-file-default filename))))
-    (error (c) (format *error-output* "Error opening pdf ~a: ~a" filename c))))
+                  (match extension
+                    ((or "flv" "mkv" "mp4")
+                     (uiop:launch-program (list "mpv" filename)))
+                    (_
+                     (next/file-manager-mode:open-file-function filename))))
+    (error (c) (log:error "Error opening ~a: ~a" filename c))))
+
+(setf next/file-manager-mode:*open-file-function* #'my-open-videos)
 #+end_src
 
 ** Loading Files
@@ -593,3 +618,40 @@ default modes:
 #+begin_src lisp
 (add-to-default-list 'proxy-mode 'buffer 'default-modes)
 #+end_src
+
+** Hooks
+
+A hook is a variable that holds a list of functions.
+We say a hook is executed when all its functions are run one after the other,
+over its arguments (which are decided at the call site).
+
+Many hooks are executed at different points in Next.
+
+Hooks are exposed to the users so that they can customize the behaviour of
+specific actions in arbitrary ways.
+
+Hooks are added at different sites, among others:
+
+- Global hooks, such as ~load-hook~ hook and ~after-init-hook~.
+- Window / buffer related hooks.
+- Commands "before" and "after" hooks.
+- Modes "enable" and "disable" hooks.
+
+For instance, if you want to force =old.reddit.com= over =www.reddit.com=, you
+can set a hook like the following in you =~/.config/next/init.lisp=:
+
+#+begin_src lisp
+(defun old-reddit-hook (url)
+  (let* ((uri (quri:uri url)))
+    (if (search "www.reddit" (quri:uri-host uri))
+        (progn
+          (setf (quri:uri-host uri) "old.reddit.com")
+          (let ((new-url (quri:render-uri uri)))
+            (log:info "Switching to old Reddit: ~a" new-url)
+            new-url))
+        url)))
+(add-to-default-list #'old-reddit-hook 'buffer 'load-hook)
+#+end_src
+
+Some hooks like the above example expect a return value, so it's important to
+make sure we return ~url~ here.
