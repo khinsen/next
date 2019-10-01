@@ -1,16 +1,11 @@
-#ifndef WINDOW_H
-#define WINDOW_H
-
 #include <QWidget>
-#include <QWebEngineView>
+#include "buffer.h"
 
-class QWebEngineView;
+class Buffer;
 class Window : public QWidget
 {
 public:
     explicit Window(QWidget *parent = 0);
 private:
-    QWebEngineView *web_view;
+    Buffer *buffer;
 };
-
-#endif // WINDOW_H
