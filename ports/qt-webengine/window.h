@@ -2,14 +2,15 @@
 #define WINDOW_H
 
 #include <QWidget>
+#include <QWebEngineView>
 
-class QPushButton;
+class QWebEngineView;
 class Window : public QWidget
 {
- public:
-  explicit Window(QWidget *parent = 0);
- private:
- QPushButton *m_button;
+public:
+    explicit Window(QWidget *parent = 0);
+private:
+    QWebEngineView *web_view;
 };
 
 #endif // WINDOW_H
