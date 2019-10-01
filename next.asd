@@ -2,7 +2,7 @@
 ;;; next.asd
 
 (asdf:defsystem :next
-  :version "1.3.1"
+  :version "1.3.2"
   :author "Atlas Engineer LLC"
   :license "BSD 3-Clause"
   :serial t
@@ -10,12 +10,14 @@
   :depends-on (:alexandria
                :bordeaux-threads
                :cl-annot
+               :cl-ansi-text
                :cl-css
                :cl-hooks
                :cl-json
                :cl-markup
                :cl-ppcre
                :cl-ppcre-unicode
+               :cl-prevalence
                :closer-mop
                :dbus
                :dexador
@@ -34,11 +36,17 @@
                :unix-opts
                ;; Local systems:
                :next/download-manager
-               :next/ring)
+               :next/ring
+               :next/history-tree)
   :components ((:module "source"
                 :components
-                (;; Core Functionality
+                ((:file "patch-annot")
+                 ;; Independent utilities
                  (:file "package")
+                 (:file "tags")
+                 (:file "time")
+                 ;; Core Functionality
+                 (:file "serialization")
                  (:file "macro")
                  (:file "global")
                  (:file "port")
@@ -46,10 +54,13 @@
                  (:file "command")
                  (:file "mode")
                  (:file "utility")
+                 (:file "urls")
+                 (:file "fuzzy")
                  (:file "buffer")
                  (:file "window")
                  (:file "minibuffer")
                  (:file "keymap")
+                 (:file "recent-buffers")
                  ;; Core Packages
                  (:file "bookmark")
                  (:file "zoom")
@@ -61,19 +72,21 @@
                  (:file "help")
                  ;; Core Modes
                  (:file "application-mode")
-                 (:file "document-mode")
+                 (:file "web-mode")
                  (:file "vi-mode")
                  (:file "blocker-mode")
                  (:file "proxy-mode")
                  (:file "noscript-mode")
                  (:file "file-manager-mode")
                  (:file "download-mode")
-                 ;; About
-                 (:file "about")
+                 (:file "vcs-mode")
+                 (:file "video-mode")
                  ;; Port Compatibility Layers
                  (:file "ports/pyqt-webengine" :if-feature :darwin)
                  (:file "ports/gtk-webkit" :if-feature (:and :unix (:not :darwin)))
-                 ;; Base
+                 ;; Depends on everything else:
+                 (:file "about")
+                 (:file "session")
                  (:file "base"))))
   :build-operation "program-op"
   :build-pathname "next"
@@ -105,8 +118,6 @@
                                  :prove-asdf 'run-test-system c)))
 
 (asdf:defsystem next/ring
-  :depends-on (trivial-clipboard
-               cl-annot)
   :components ((:module source :pathname "libraries/ring/"
                 :components ((:file "package")
                              (:file "ring")))))
@@ -116,6 +127,20 @@
   :depends-on (prove
                next/ring)
   :components ((:module source/tests :pathname "libraries/ring/tests/"
+                :components ((:test-file "tests"))))
+  :perform (asdf:test-op (op c) (uiop:symbol-call
+                                 :prove-asdf 'run-test-system c)))
+
+(asdf:defsystem next/history-tree
+  :components ((:module source :pathname "libraries/history-tree/"
+                :components ((:file "package")
+                             (:file "history-tree")))))
+
+(asdf:defsystem next/history-tree/tests
+  :defsystem-depends-on (prove-asdf)
+  :depends-on (prove
+               next/history-tree)
+  :components ((:module source/tests :pathname "libraries/history-tree/tests/"
                 :components ((:test-file "tests"))))
   :perform (asdf:test-op (op c) (uiop:symbol-call
                                  :prove-asdf 'run-test-system c)))

@@ -39,7 +39,7 @@
       (when (< (ps:@ position top) 0)
         (setf (ps:@ position top) (+ (ps:@ position top) 20)))
       (setf (ps:@ el class-name) "next-link-hint")
-      (setf (ps:@ el style) (ps:lisp (box-style (active-buffer *interface*))))
+      (setf (ps:@ el style) (ps:lisp (box-style (current-buffer))))
       (setf (ps:@ el style position) "absolute")
       (setf (ps:@ el style left) (+ (ps:@ position left) "px"))
       (setf (ps:@ el style top) (+ (ps:@ position top) "px"))
@@ -99,7 +99,7 @@
 
 (defun remove-link-hints ()
   (%remove-link-hints
-   :buffer (callback-buffer (minibuffer *interface*))))
+   :buffer (callback-buffer (current-minibuffer))))
 
 (defmacro query-hints (prompt (symbol) &body body)
   `(with-result* ((links-json (add-link-hints))
@@ -117,7 +117,8 @@
   "Show a set of link hints, and go to the user inputted one in the
 currently active buffer."
   (query-hints "Go to link:" (selected-link)
-    (buffer-set-url :url selected-link :buffer (active-buffer *interface*))))
+    (set-url selected-link :buffer (current-buffer)
+             :raw-url-p t)))
 
 (define-deprecated-command go-anchor ()
   "Deprecated by `follow-hint'."
@@ -128,7 +129,8 @@ currently active buffer."
 buffer (not set to visible active buffer)."
   (query-hints "Open link in new buffer:" (selected-link)
     (let ((new-buffer (make-buffer)))
-      (buffer-set-url :url selected-link :buffer new-buffer))))
+      (set-url selected-link :buffer new-buffer
+               :raw-url-p t))))
 
 (define-deprecated-command go-anchor-new-buffer ()
   "Deprecated by `follow-hint-new-buffer'."
@@ -139,8 +141,8 @@ buffer (not set to visible active buffer)."
 visible active buffer."
   (query-hints "Go to link in new buffer:" (selected-link)
     (let ((new-buffer (make-buffer)))
-      (buffer-set-url :url selected-link :buffer new-buffer)
-      (set-active-buffer *interface* new-buffer))))
+      (set-url selected-link :buffer new-buffer :raw-url-p t)
+   (set-current-buffer new-buffer))))
 
 (define-deprecated-command go-anchor-new-buffer-focus ()
   "Deprecated by `follow-hint-new-buffer-focus'."

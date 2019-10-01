@@ -22,10 +22,10 @@
   (let (l) (do-symbols (s p l)
              (push s l))))
 
-(defun variable-complete (input)
+(defun variable-completion-filter (input)
   (fuzzy-match input (package-variables)))
 
-(defun function-complete (input)        ; TODO: Rename to `command-complete-fn' and show packages.
+(defun function-completion-filter (input)        ; TODO: Use `command-completion-filter'? And show packages?
   (fuzzy-match input (mapcar #'sym (list-commands))))
 
 ;; TODO: This is barely useful as is since we don't have many globals.  We need to
@@ -34,12 +34,12 @@
   "Inspect a variable and show it in a help buffer."
   (with-result (input (read-from-minibuffer
                        (make-instance 'minibuffer
-                                      :completion-function 'variable-complete
+                                      :completion-function #'variable-completion-filter
                                       :input-prompt "Inspect variable:")))
     (let* ((help-buffer (make-buffer
-                         :name (concatenate 'string "HELP-" (symbol-name input))
-                         :default-modes (cons 'help-mode
-                                                (get-default 'buffer 'default-modes))))
+                         :title (str:concat "*Help-" (symbol-name input) "*")
+                         :modes (cons 'help-mode
+                                      (get-default 'buffer 'default-modes))))
            (help-contents (cl-markup:markup
                            (:h1 (symbol-name input))
                            (:p (documentation input 'variable))
@@ -47,8 +47,8 @@
                            (:p (write-to-string (symbol-value input)))))
            (insert-help (ps:ps (setf (ps:@ document Body |innerHTML|)
                                      (ps:lisp help-contents)))))
-      (rpc-buffer-evaluate-javascript *interface* help-buffer insert-help)
-      (set-active-buffer *interface* help-buffer))))
+      (rpc-buffer-evaluate-javascript help-buffer insert-help)
+   (set-current-buffer help-buffer))))
 
 ;; TODO: Have both "function-inspect" and "command-inspect"?
 (define-command command-inspect ()
@@ -56,11 +56,11 @@
   (with-result (input (read-from-minibuffer
                        (make-instance 'minibuffer
                                       :input-prompt "Inspect command:"
-                                      :completion-function 'function-complete)))
+                                      :completion-function #'function-completion-filter)))
     (let* ((help-buffer (make-buffer
-                         :name (str:concat "*Help-" (symbol-name input) "*")
-                         :default-modes (cons 'help-mode
-                                              (get-default 'buffer 'default-modes))))
+                         :title (str:concat "*Help-" (symbol-name input) "*")
+                         :modes (cons 'help-mode
+                                      (get-default 'buffer 'default-modes))))
            (help-contents (cl-markup:markup
                            (:h1 (symbol-name input))
                            (:h2 "Documentation")
@@ -72,8 +72,8 @@
                                                t)))))
            (insert-help (ps:ps (setf (ps:@ document Body |innerHTML|)
                                      (ps:lisp help-contents)))))
-      (rpc-buffer-evaluate-javascript *interface* help-buffer insert-help)
-      (set-active-buffer *interface* help-buffer))))
+      (rpc-buffer-evaluate-javascript help-buffer insert-help)
+   (set-current-buffer help-buffer))))
 
 (defun evaluate (string)
   "Evaluate all expressions in string and return a list of values.
@@ -89,9 +89,9 @@ This does not use an implicit PROGN to allow evaluating top-level expressions."
                        (make-instance 'minibuffer
                                       :input-prompt "Evaluate Lisp:")))
     (let* ((result-buffer (make-buffer
-                           :name (concatenate 'string "EVALUATION RESULT-" input)
-                           :default-modes (cons 'help-mode
-                                                (get-default 'buffer 'default-modes))))
+                           :title "*List Evaluation*" ; TODO: Reuse buffer / create REPL mode.
+                           :modes (cons 'help-mode
+                                        (get-default 'buffer 'default-modes))))
            (results (handler-case
                         (mapcar #'write-to-string (evaluate input))
                       (error (c) (format nil "~a" c))))
@@ -104,15 +104,15 @@ This does not use an implicit PROGN to allow evaluating top-level expressions."
                                          collect (cl-markup:markup (:p result)))))
            (insert-results (ps:ps (setf (ps:@ document Body |innerHTML|)
                                         (ps:lisp result-contents)))))
-      (rpc-buffer-evaluate-javascript *interface* result-buffer insert-results)
-      (set-active-buffer *interface* result-buffer))))
+      (rpc-buffer-evaluate-javascript result-buffer insert-results)
+   (set-current-buffer result-buffer))))
 
 (define-command help ()
   "Print some help."
   (let* ((help-buffer (make-buffer
-                       :name "*Help*"
-                       :default-modes (cons 'help-mode
-                                            (get-default 'buffer 'default-modes))))
+                       :title "*Help*"
+                       :modes (cons 'help-mode
+                                    (get-default 'buffer 'default-modes))))
          (help-contents
            (cl-markup:markup
             (:h1 "Getting started")
@@ -187,8 +187,8 @@ This does not use an implicit PROGN to allow evaluating top-level expressions."
 
          (insert-help (ps:ps (setf (ps:@ document Body |innerHTML|)
                                    (ps:lisp help-contents)))))
-      (rpc-buffer-evaluate-javascript *interface* help-buffer insert-help)
-    (set-active-buffer *interface* help-buffer)
+      (rpc-buffer-evaluate-javascript help-buffer insert-help)
+  (set-current-buffer help-buffer)
     help-buffer))
 
 (define-command next-version ()
@@ -196,3 +196,28 @@ This does not use an implicit PROGN to allow evaluating top-level expressions."
 The version number is stored in the clipboard."
   (trivial-clipboard:text +version+)
   (echo "Version ~a" +version+))
+
+(define-command messages ()
+  "Show the *Messages* buffer."
+  (let ((buffer (find-if (lambda (b)
+                           (string= "*Messages*" (title b)))
+                         (alexandria:hash-table-values (buffers *interface*)))))
+    (unless buffer
+      (setf buffer (make-buffer
+                    :title "*Messages*"
+                    :modes (cons 'help-mode
+                                 (get-default 'buffer 'default-modes)))))
+    (let* ((content
+             (apply #'cl-markup:markup*
+                    '(:h1 "Messages")
+                    (reverse (messages-content *interface*))))
+           (insert-content (ps:ps (setf (ps:@ document body |innerHTML|)
+                                        (ps:lisp content)))))
+      (rpc-buffer-evaluate-javascript buffer insert-content))
+    (set-current-buffer buffer)
+    buffer))
+
+(define-command clear-messages ()
+  "Clear the *Messages* buffer."
+  (setf (messages-content *interface*) '())
+  (echo "Messages cleared."))

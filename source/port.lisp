@@ -6,7 +6,7 @@
 ;; we have no way to access the old value.
 
 (defclass port ()
-  ((name :initarg :name :initform "next-platform-port" :accessor name
+  ((name :initarg :name :initform +platform-port-command+ :accessor name
          :documentation "Basename of the executable.")
    (path :initarg :path :initform #'derive-path-from-name
          :documentation "Full path to the executable.
@@ -28,7 +28,7 @@ as a string.")
 
 (defmethod path ((port port))
   (let ((p (port-accessor port 'path (name port))))
-    (if (probe-file p)
+    (if (uiop:file-exists-p p)
         (truename p)
         p)))
 
@@ -49,7 +49,7 @@ This is an acceptable value for the PATH slot of the PORT class."
     (or
      ;; look at the current directory.
      (loop for name in names
-        when (probe-file name)
+        when (uiop:file-exists-p name)
         return name)
 
      ;; look in the ports/ subdir.
@@ -58,8 +58,10 @@ This is an acceptable value for the PATH slot of the PORT class."
         for file-in-subdir = (merge-pathnames
                               (file-namestring name)
                               (merge-pathnames (format nil "ports/~a/" dir-name)
-                                               *default-pathname-defaults*))
-        when (probe-file file-in-subdir)
+                                               (or (and (uiop:argv0)
+                                                        (uiop:pathname-directory-pathname (truename (uiop:argv0))))
+                                                   *default-pathname-defaults*)))
+        when (uiop:file-exists-p file-in-subdir)
         return file-in-subdir)
 
      ;; as a last resort, return "name".
