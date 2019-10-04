@@ -2,7 +2,7 @@
 ;;; next.asd
 
 (asdf:defsystem :next
-  :version "1.3.2"
+  :version "1.3.3"
   :author "Atlas Engineer LLC"
   :license "BSD 3-Clause"
   :serial t
@@ -37,16 +37,18 @@
                ;; Local systems:
                :next/download-manager
                :next/ring
-               :next/history-tree)
+               :next/history-tree
+               :next/password-manager)
   :components ((:module "source"
                 :components
                 ((:file "patch-annot")
+                 (:file "patch-serialization")
                  ;; Independent utilities
                  (:file "package")
                  (:file "tags")
                  (:file "time")
+                 (:file "file-human-size")
                  ;; Core Functionality
-                 (:file "serialization")
                  (:file "macro")
                  (:file "global")
                  (:file "port")
@@ -62,6 +64,7 @@
                  (:file "keymap")
                  (:file "recent-buffers")
                  ;; Core Packages
+                 (:file "password")
                  (:file "bookmark")
                  (:file "zoom")
                  (:file "scroll")
@@ -144,3 +147,16 @@
                 :components ((:test-file "tests"))))
   :perform (asdf:test-op (op c) (uiop:symbol-call
                                  :prove-asdf 'run-test-system c)))
+
+(asdf:defsystem next/password-manager
+  :depends-on (bordeaux-threads
+               cl-ppcre
+               cl-annot
+               str
+               trivial-clipboard
+               uiop)
+  :components ((:module source :pathname "libraries/password-manager/"
+                :components ((:file "package")
+                             (:file "password")
+                             (:file "password-pass")
+                             (:file "password-keepassxc")))))

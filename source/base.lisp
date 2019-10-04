@@ -50,6 +50,15 @@ Set to '-' to read standard input instead.")
   (kill-interface *interface*)
   (kill-port (port *interface*)))
 
+(define-command quit-after-clearing-session ()
+  "Clear session then quit Next."
+  (setf
+   (session-store-function *interface*) nil
+   (session-restore-function *interface*) nil)
+  (uiop:delete-file-if-exists (session-path *interface*))
+  (kill-interface *interface*)
+  (kill-port (port *interface*)))
+
 (define-deprecated-command kill ()
   "Deprecated by `quit'."
   (quit))
@@ -181,7 +190,9 @@ This function is suitable as a `remote-interface' `startup-function'."
       (let ((window (rpc-window-make))
             (buffer (help)))
         (window-set-active-buffer window buffer)))
-  (funcall (session-restore-function *interface*)))
+  (match (session-restore-function *interface*)
+    ((guard f f)
+     (funcall f))))
 
 @export
 (defun start (&key urls
@@ -196,6 +207,8 @@ Finally, run the `*after-init-hook*'."
     ;; Randomness should be seeded as early as possible to avoid generating
     ;; deterministic tokens.
     (setf *random-state* (make-random-state t))
+    ;; Reset `*after-init-hook*' or else the handlers will stack.
+    (setf *after-init-hook* nil)
     (unless (getf *options* :no-init)
       (load-lisp-file init-file :interactive (not non-interactive)))
     ;; create the interface object
@@ -211,12 +224,7 @@ Finally, run the `*after-init-hook*'."
     ;; Start the port after the interface so that we don't overwrite the log when
     ;; an instance is already running.
     (handler-case
-        (progn
-          (initialize-port)
-          (setf (slot-value *interface* 'init-time)
-                (local-time:timestamp-difference (local-time:now) startup-timestamp))
-          (hooks:run-hook '*after-init-hook*)
-          (funcall (startup-function *interface*) (or urls *free-args*)))
+        (initialize-port)
       (error (c)
         (log:error "~a~&~a" c
                    "Make sure the platform port executable is either in the
@@ -225,7 +233,17 @@ PATH or set in you ~/.config/next/init.lisp, for instance:
      (setf +platform-port-command+
          \"~/common-lisp/next/ports/gtk-webkit/next-gtk-webkit\")")
         (when non-interactive
-          (uiop:quit))))))
+          (uiop:quit))))
+    (setf (slot-value *interface* 'init-time)
+          (local-time:timestamp-difference (local-time:now) startup-timestamp))
+    (handler-case
+        (hooks:run-hook '*after-init-hook*)
+      (error (c)
+        (log:error "In *after-init-hook*: ~a" c)))
+    (handler-case
+        (funcall (startup-function *interface*) (or urls *free-args*))
+      (error (c)
+        (log:error "In startup-function ~a: ~a" (startup-function *interface*) c)))))
 
 (define-command next-init-time ()
   "Return the duration of Next initialization."

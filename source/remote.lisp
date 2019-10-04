@@ -116,7 +116,8 @@ distance scroll-left or scroll-right will scroll.")
                    :documentation "The maximum zoom ratio relative to the default.")
    (zoom-ratio-default :accessor zoom-ratio-default :initform 1.0
                        :documentation "The default zoom ratio.")
-   (cookies-path :accessor cookies-path :initform (xdg-data-home "cookies.txt")
+   (cookies-path :accessor cookies-path
+                 :initform (xdg-data-home "cookies.txt")
                  :documentation "The path where cookies are stored.  Not all
 platform ports might support this.")
    (box-style :accessor box-style
@@ -239,6 +240,8 @@ for the platform port to start up.")
 RPC endpoint of a platform-port to see if it is ready to begin accepting RPC
 commands.")
    (active-connection :accessor active-connection :initform nil)
+   (password-interface :accessor password-interface
+                       :initform (password:make))
    (dbus-pid :accessor dbus-pid :initform nil :type :number
              :documentation "The process identifier of the dbus instance started
 by Next when the user session dbus instance is not available.")
@@ -277,10 +280,10 @@ window or not.")
                                ("wiki" "https://en.wikipedia.org/w/index.php?search=~a" "https://en.wikipedia.org/"))
                    :documentation "An association list of the search engines.
 
-The elements are in the form (SHORTCUT SEARCH-URL FALLBACK-URL).  You can inoke
+The elements are in the form (SHORTCUT SEARCH-URL FALLBACK-URL).  You can invoke
 them from the minibuffer by prefixing your query with SHORTCUT.  If the query is
-empty, FALLBACK-URL is load instead.  If FALLBACK-URL is empty, SEARCH-URL is
-used on en empty search.
+empty, FALLBACK-URL is loaded instead.  If FALLBACK-URL is empty, SEARCH-URL is
+used on an empty search.
 
 The 'default' engine is used when the query is not a valid URL, or the first
 keyword is not recognized.")
@@ -309,6 +312,12 @@ The history data kept in memory.")
                  :initform (xdg-data-home "history.lisp")
                  :documentation "
 The path where the system will create/save the global history.")
+   (history-db-path :initarg :history-db-path
+                    :accessor history-db-path
+                    :type pathname
+                    :initform (xdg-data-home "history.lisp")
+                    :documentation "
+Deprecated.  See `history-path'.")
    (history-store-function :initarg :history-store-function
                            :accessor history-store-function
                            :type function
@@ -330,6 +339,11 @@ The bookmarks kept in memory.")
                    :initform (xdg-data-home "bookmarks.lisp")
                    :documentation "
 The path where the system will create/save the bookmarks.")
+   (bookmark-db-path :initarg :bookmark-db-path
+                     :accessor bookmark-db-path
+                     :initform (xdg-data-home "bookmarks.lisp")
+                     :documentation "
+Deprecated.  See `bookmarks-path'.")
    (bookmarks-store-function :initarg :bookmarks-store-function
                              :accessor bookmarks-store-function
                              :type function
@@ -368,6 +382,14 @@ The handlers take the window as argument.")
 It is run before `initialize-modes' so that the default mode list can still be
 altered from the hooks.
 The handlers take the buffer as argument.")
+   (buffer-before-make-hook :accessor buffer-before-make-hook
+                            :type list
+                            :initform '()
+                            :documentation "Hook run before `rpc-buffer-make'.
+This hook is mostly useful to set the `cookies-path'.
+The buffer web view is not allocated, so it's not possible to run any
+parenscript from this hook.  See `buffer-make-hook' for a hook.
+The handlers take the buffer as argument.")
    (minibuffer-make-hook :accessor minibuffer-make-hook :initform '() :type list
                          :documentation "Hook run after the `minibuffer' class
 is instantiated and before initializing the minibuffer modes.
@@ -379,10 +401,19 @@ The handlers take the URL as argument.")
                         :documentation "Hook run after a download has completed.
 The handlers take the `download-manager:download' class instance as argument.")))
 
+(defmethod bookmark-db-path ((interface remote-interface))
+  (log:warn "Deprecated, use `bookmarks-path' instead.")
+  (bookmarks-path interface))
+
+(defmethod history-db-path ((interface remote-interface))
+  (log:warn "Deprecated, use `history-path' instead.")
+  (history-path interface))
+
 (defmethod history-data ((interface remote-interface))
   "Return the `history-data' slot from INTERFACE.
 If empty, the history data is initialized with `history-restore-function'."
-  (unless (slot-value interface 'history-data)
+  (when (and (null (slot-value interface 'history-data))
+             (history-restore-function interface))
     (funcall (history-restore-function interface)))
   (slot-value interface 'history-data))
 
@@ -391,12 +422,14 @@ If empty, the history data is initialized with `history-restore-function'."
 Persist the `history-data' slot from INTERFACE to `history-path' with
 `history-store-function'."
   (setf (slot-value interface 'history-data) value)
-  (funcall (history-store-function interface)))
+  (match (history-store-function interface)
+    ((guard f f) (funcall f))))
 
 (defmethod bookmarks-data ((interface remote-interface))
   "Return the `bookmarks-data' slot from INTERFACE.
 If empty, the bookmarks data is initialized with `bookmarks-restore-function'."
-  (unless (slot-value interface 'bookmarks-data)
+  (when (and (null (slot-value interface 'bookmarks-data))
+             (bookmarks-restore-function interface))
     (funcall (bookmarks-restore-function interface)))
   (slot-value interface 'bookmarks-data))
 
@@ -405,7 +438,8 @@ If empty, the bookmarks data is initialized with `bookmarks-restore-function'."
 Persist the `bookmarks-data' slot from INTERFACE to `bookmarks-path' with
 `bookmarks-store-function'."
   (setf (slot-value interface 'bookmarks-data) value)
-  (funcall (bookmarks-store-function interface)))
+  (match (bookmarks-store-function interface)
+    ((guard f f) (funcall f))))
 
 (declaim (ftype (function (buffer)) add-to-recent-buffers))
 (defun add-to-recent-buffers (buffer)
@@ -698,7 +732,9 @@ If DEAD-BUFFER is a dead buffer, recreate its web view and give it a new ID."
                      (apply #'make-instance 'buffer :id (get-unique-buffer-identifier)
                             (append (when title `(:title ,title))
                                     (when default-modes `(:default-modes ,default-modes)))))))
-    (ensure-parent-exists (cookies-path buffer))
+    (hooks:run-hook (hooks:object-hook *interface* 'buffer-before-make-hook) buffer)
+    (unless (str:emptyp (namestring (cookies-path buffer)))
+      (ensure-parent-exists (cookies-path buffer)))
     (setf (gethash (id buffer) (buffers *interface*)) buffer)
     (incf (total-buffer-count *interface*))
     (%rpc-send "buffer_make" (id buffer)
@@ -742,7 +778,8 @@ Run BUFFER's `buffer-delete-hook' over BUFFER before deleting it."
     (remhash (id buffer) (buffers *interface*))
     (setf (id buffer) "")
     (add-to-recent-buffers buffer)
-    (funcall (session-store-function *interface*))))
+    (match (session-store-function *interface*)
+      ((guard f f) (funcall f)))))
 
 (declaim (ftype (function (buffer string)) rpc-buffer-load))
 @export

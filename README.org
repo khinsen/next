@@ -35,7 +35,18 @@ looking for ~https://www.example.com~, you could type in ~ele~, ~exa~,
 ** History as a tree
 History is represented as a tree that you can traverse. smarter than
 the "forwards-backwards" abstraction found in other browsers, the tree
-makes sure you never lose track of where you've been.
+makes sure  you never lose  track of where  you've been.
+
+** Multiple selection
+Commands can accept multiple input, allowing you to quickly perform an
+operation against multiple tabs.
+
+#+html: <img src="https://next.atlas.engineer/image/next-multiple-selection.png" align="center"/>
+
+** Powerful Bookmarks
+Bookmark a page with tags. Search bookmarks with compound
+queries. Capture more data about your bookmarks, and group and wrangle
+them in any way you like.
 
 ** Lightning fast navigation
 Next is lightweight and fast. The interface does not get in your way-

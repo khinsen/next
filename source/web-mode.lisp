@@ -20,14 +20,16 @@
     (let ((emacs-map (make-keymap))
           (vi-map (make-keymap)))
       (define-key :keymap emacs-map
-        "M-f" #'history-forwards-all-query
-        "M-b" #'history-all-query
+        "C-M-f" #'history-forwards-all-query
+        "C-M-b" #'history-all-query
+        "M-f" #'history-forwards-query
+        "M-b" #'history-backwards-query
+        "C-f" #'history-forwards
+        "C-b" #'history-backwards
         "C-g" #'follow-hint
         "M-g" #'follow-hint-new-buffer-focus
         "C-u M-g" #'follow-hint-new-buffer
         "C-x C-w" #'copy-hint-url
-        "C-f" #'history-forwards-query
-        "C-b" #'history-backwards-query
         "C-v" #'paste
         "C-c" #'copy
         "button9" #'history-forwards
@@ -41,8 +43,8 @@
         "C-x HYPHEN" #'zoom-out-page
         "C-x C-0" #'unzoom-page
         "C-x 0" #'unzoom-page
-        "C-R" #'reload-current-buffer
-        "C-r" #'reload-buffer
+        "C-r" #'reload-current-buffer
+        "C-R" #'reload-buffer
         "C-m o" #'set-url-from-bookmark
         "C-m s" #'bookmark-current-page
         "C-m C-s" #'bookmark-page
@@ -81,10 +83,12 @@
         "KP_Prior" #'scroll-page-up)
 
       (define-key :keymap vi-map
-        "H" #'history-backwards-query
-        "L" #'history-forwards-query
-        "M-h" #'history-all-query
-        "M-l" #'history-forwards-all-query
+        "H" #'history-backwards
+        "L" #'history-forwards
+        "M-h" #'history-backwards-query
+        "M-l" #'history-forwards-query
+        "M-H" #'history-all-query
+        "M-L" #'history-forwards-all-query
         "f" #'follow-hint
         "F" #'follow-hint-new-buffer-focus
         "; f" #'follow-hint-new-buffer
@@ -203,6 +207,15 @@
                                       :completion-function (history-forwards-completion-filter))))
     (when input
       (set-url-from-history input))))
+
+(define-command history-forwards-maybe-query (&optional (mode (find-mode
+                                                               (current-buffer)
+                                                               'web-mode)))
+  "If current node has multiple chidren, query forward-URL to navigate to.
+Otherwise go forward to the only child."
+  (if (<= 2 (length (htree:children-nodes (history mode))))
+      (history-forwards-all-query)
+      (history-forwards)))
 
 (defun history-forwards-all-completion-filter (&optional (mode (find-mode
                                                         (current-buffer)
@@ -347,7 +360,8 @@
                      :test #'equals)
     (when url
       (history-add url :title (title buffer)))
-    (funcall (session-store-function *interface*)))
+    (match (session-store-function *interface*)
+      ((guard f f) (funcall f))))
   (echo "Finished loading: ~a." url)
   ;; TODO: Wait some time before dismissing the minibuffer.
   (echo-dismiss))
