@@ -10,6 +10,7 @@
   - [[#run][Run]]
   - [[#run-from-source][Run from Source]]
   - [[#update-local-lisp-libraries][Update local Lisp libraries]]
+- [[#architecture][Architecture]]
 - [[#help--community][Help & Community]]
   - [[#learning-common-lisp][Learning Common Lisp]]
   - [[#contribution][Contribution]]
@@ -288,6 +289,18 @@ If you use the internal Quicklisp distribution (i.e. with the default
 =NEXT_INTERNAL_QUICKLISP=true=), the distribution is updated automatically for
 you.
 
+* Architecture
+The purpose of this section is to get you started with understanding the code base. It is not an API documentation, and the fact that a variable or class is mentioned here should not be taken as a promise that it will exist forever.
+
+The state of the browser is stored in =next::*interface*= and is an instance of the class named by =next:*remote-interface-class*=, whose initial value is =next:remote-interface=. The reason for having a variable naming the class that is actually used for creating instances is customization: user code can subclass =next:remote-interface=, modify it e.g. by adding search engines, and set =next:*remote-interface-class*= to the subclass. The same pattern is used for a few other classes explained below.
+
+A hash table holding the buffers is stored in slot =buffers= of a =remote-interface=. Buffers are instances of the class named by =next:*buffer-class*=, whose initial value is =next:buffer=.
+
+A hash table holding the windows is stored in slot =windows= of a =remote-interface=. Windows are instances of the class named by =next:*window-class*=, whose initial value is =next:window=.
+
+Each buffer has a list of modes, which defines the keyboard maps that apply. A mode contains a keymap for each keymap-scheme, the currently defined keymap-schemes being =:emacs= and =:vi-normal=. For translating key sequences into commands, the list is traversed from start to end, the first mode that defines the key sequence is used for looking up the commands. Modes are classes defined with =define-mode=.
+
+A buffer has an URL associated with it. The URL is passed on to the platform port, which fetches and displays the corresponding page. The URL can also be =nil=, yielding a blank page. Using =next::rpc-buffer-evaluate-javascript=, JavaScript code can be executed in the context of the buffer. This permits constructing pages programmatically. For examples, see =next::command-inspect= or =next::help=.
 * Help & Community
 There are several ways to ask for help from the community. The first
 and easiest one is to simply open up an issue with whatever problem
